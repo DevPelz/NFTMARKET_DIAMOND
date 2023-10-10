@@ -6,7 +6,7 @@ pragma solidity ^0.8.19;
 
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 
-abstract contract ERC721 {
+contract ERC721TOKEN {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -121,44 +121,6 @@ abstract contract ERC721 {
             "UNSAFE_RECIPIENT"
         );
     }
-
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 id,
-        bytes calldata data
-    ) public virtual {
-        transferFrom(from, to, id);
-
-        require(
-            to.code.length == 0 ||
-                ERC721TokenReceiver(to).onERC721Received(
-                    msg.sender,
-                    from,
-                    id,
-                    data
-                ) ==
-                ERC721TokenReceiver.onERC721Received.selector,
-            "UNSAFE_RECIPIENT"
-        );
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                              ERC165 LOGIC
-    //////////////////////////////////////////////////////////////*/
-
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view virtual returns (bool) {
-        return
-            interfaceId == 0x01ffc9a7 || // ERC165 Interface ID for ERC165
-            interfaceId == 0x80ac58cd || // ERC165 Interface ID for ERC721
-            interfaceId == 0x5b5e139f; // ERC165 Interface ID for ERC721Metadata
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                        INTERNAL MINT/BURN LOGIC
-    //////////////////////////////////////////////////////////////*/
 
     function _mint(address to, uint256 id) internal virtual {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();

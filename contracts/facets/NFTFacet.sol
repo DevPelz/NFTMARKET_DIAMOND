@@ -1,356 +1,249 @@
-// SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.0.0) (token/ERC721/ERC721.sol)
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.19;
 
-pragma solidity ^0.8.20;
+/// @notice Modern, minimalist, and gas efficient ERC-721 implementation.
+/// @author Solmate (https://github.com/transmissions11/solmate/blob/main/src/tokens/ERC721.sol)
 
-import {IERC721} from "lib/openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
-import {IERC721Receiver} from "lib/openzeppelin-contracts/contracts/token/ERC721/IERC721Receiver.sol";
-import {IERC721Metadata} from "lib/openzeppelin-contracts/contracts/token/ERC721/extensions/IERC721Metadata.sol";
-import {Context} from "lib/openzeppelin-contracts/contracts/utils/Context.sol";
-import {Strings} from "lib/openzeppelin-contracts/contracts/utils/Strings.sol";
-import {IERC165, ERC165} from "lib/openzeppelin-contracts/contracts/utils/introspection/ERC165.sol";
-import {IERC721Errors} from "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol";
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 
-contract ERC721TOKEN is
-    Context,
-    ERC165,
-    IERC721,
-    IERC721Metadata,
-    IERC721Errors
-{
-    using Strings for uint256;
+abstract contract ERC721 {
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
 
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view virtual override(ERC165, IERC165) returns (bool) {
-        return
-            interfaceId == type(IERC721).interfaceId ||
-            interfaceId == type(IERC721Metadata).interfaceId ||
-            super.supportsInterface(interfaceId);
+    event Transfer(
+        address indexed from,
+        address indexed to,
+        uint256 indexed id
+    );
+
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 indexed id
+    );
+
+    event ApprovalForAll(
+        address indexed owner,
+        address indexed operator,
+        bool approved
+    );
+
+    /*//////////////////////////////////////////////////////////////
+                         METADATA STORAGE/LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function tokenURI(uint256 id) public view virtual returns (string memory) {
+        return "";
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                      ERC721 BALANCE/OWNER STORAGE
+    //////////////////////////////////////////////////////////////*/
+
+    function ownerOf(uint256 id) public view virtual returns (address owner) {
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        require((owner = ds._ownerOf[id]) != address(0), "NOT_MINTED");
     }
 
     function balanceOf(address owner) public view virtual returns (uint256) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        if (owner == address(0)) {
-            revert ERC721InvalidOwner(address(0));
-        }
-        return ds._balances[owner];
+        require(owner != address(0), "ZERO_ADDRESS");
+
+        return ds._balanceOf[owner];
     }
 
-    function ownerOf(uint256 tokenId) public view virtual returns (address) {
+    function approve(address spender, uint256 id) public virtual {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        return _requireOwned(tokenId);
-    }
+        address owner = ds._ownerOf[id];
 
-    function name() public view virtual returns (string memory) {
-        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        return ds._name;
-    }
+        require(
+            msg.sender == owner || ds.isApprovedForAll[owner][msg.sender],
+            "NOT_AUTHORIZED"
+        );
 
-    function symbol() public view virtual returns (string memory) {
-        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        return ds._symbol;
-    }
+        ds.getApproved[id] = spender;
 
-    function tokenURI(
-        uint256 tokenId
-    ) public view virtual returns (string memory) {
-        _requireOwned(tokenId);
-
-        string memory baseURI = _baseURI();
-        return
-            bytes(baseURI).length > 0
-                ? string.concat(baseURI, tokenId.toString())
-                : "";
-    }
-
-    function _baseURI() internal view virtual returns (string memory) {
-        return "";
-    }
-
-    function approve(address to, uint256 tokenId) public virtual {
-        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        _approve(to, tokenId, _msgSender());
-    }
-
-    function getApproved(
-        uint256 tokenId
-    ) public view virtual returns (address) {
-        _requireOwned(tokenId);
-
-        return _getApproved(tokenId);
+        emit Approval(owner, spender, id);
     }
 
     function setApprovalForAll(address operator, bool approved) public virtual {
-        _setApprovalForAll(_msgSender(), operator, approved);
-    }
-
-    function isApprovedForAll(
-        address owner,
-        address operator
-    ) public view virtual returns (bool) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        return ds._operatorApprovals[owner][operator];
+        ds.isApprovedForAll[msg.sender][operator] = approved;
+
+        emit ApprovalForAll(msg.sender, operator, approved);
     }
 
-    function transferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public virtual {
-        if (to == address(0)) {
-            revert ERC721InvalidReceiver(address(0));
-        }
-        address previousOwner = _update(to, tokenId, _msgSender());
-        if (previousOwner != from) {
-            revert ERC721IncorrectOwner(from, tokenId, previousOwner);
-        }
-    }
-
-    /**
-     * @dev See {IERC721-safeTransferFrom}.
-     */
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public {
-        safeTransferFrom(from, to, tokenId, "");
-    }
-
-    /**
-     * @dev See {IERC721-safeTransferFrom}.
-     */
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) public virtual {
-        transferFrom(from, to, tokenId);
-        _checkOnERC721Received(from, to, tokenId, data);
-    }
-
-    function _ownerOf(uint256 tokenId) internal view virtual returns (address) {
+    function transferFrom(address from, address to, uint256 id) public virtual {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        return ds._owners[tokenId];
-    }
+        require(from == ds._ownerOf[id], "WRONG_FROM");
 
-    function _getApproved(
-        uint256 tokenId
-    ) internal view virtual returns (address) {
-        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        return ds._tokenApprovals[tokenId];
-    }
+        require(to != address(0), "INVALID_RECIPIENT");
 
-    function _isAuthorized(
-        address owner,
-        address spender,
-        uint256 tokenId
-    ) internal view virtual returns (bool) {
-        return
-            spender != address(0) &&
-            (owner == spender ||
-                isApprovedForAll(owner, spender) ||
-                _getApproved(tokenId) == spender);
-    }
+        require(
+            msg.sender == from ||
+                ds.isApprovedForAll[from][msg.sender] ||
+                msg.sender == ds.getApproved[id],
+            "NOT_AUTHORIZED"
+        );
 
-    function _checkAuthorized(
-        address owner,
-        address spender,
-        uint256 tokenId
-    ) internal view virtual {
-        if (!_isAuthorized(owner, spender, tokenId)) {
-            if (owner == address(0)) {
-                revert ERC721NonexistentToken(tokenId);
-            } else {
-                revert ERC721InsufficientApproval(spender, tokenId);
-            }
-        }
-    }
-
-    function _increaseBalance(address account, uint128 value) internal virtual {
+        // Underflow of the sender's balance is impossible because we check for
+        // ownership above and the recipient's balance can't realistically overflow.
         unchecked {
-            LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-            ds._balances[account] += value;
+            ds._balanceOf[from]--;
+
+            ds._balanceOf[to]++;
         }
+
+        ds._ownerOf[id] = to;
+
+        delete ds.getApproved[id];
+
+        emit Transfer(from, to, id);
     }
 
-    function _update(
+    function safeTransferFrom(
+        address from,
         address to,
-        uint256 tokenId,
-        address auth
-    ) internal virtual returns (address) {
-        address from = _ownerOf(tokenId);
+        uint256 id
+    ) public virtual {
+        transferFrom(from, to, id);
 
-        // Perform (optional) operator check
-        if (auth != address(0)) {
-            _checkAuthorized(from, auth, tokenId);
-        }
+        require(
+            to.code.length == 0 ||
+                ERC721TokenReceiver(to).onERC721Received(
+                    msg.sender,
+                    from,
+                    id,
+                    ""
+                ) ==
+                ERC721TokenReceiver.onERC721Received.selector,
+            "UNSAFE_RECIPIENT"
+        );
+    }
 
-        // Execute the update
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 id,
+        bytes calldata data
+    ) public virtual {
+        transferFrom(from, to, id);
+
+        require(
+            to.code.length == 0 ||
+                ERC721TokenReceiver(to).onERC721Received(
+                    msg.sender,
+                    from,
+                    id,
+                    data
+                ) ==
+                ERC721TokenReceiver.onERC721Received.selector,
+            "UNSAFE_RECIPIENT"
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              ERC165 LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual returns (bool) {
+        return
+            interfaceId == 0x01ffc9a7 || // ERC165 Interface ID for ERC165
+            interfaceId == 0x80ac58cd || // ERC165 Interface ID for ERC721
+            interfaceId == 0x5b5e139f; // ERC165 Interface ID for ERC721Metadata
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        INTERNAL MINT/BURN LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function _mint(address to, uint256 id) internal virtual {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        if (from != address(0)) {
-            // Clear approval. No need to re-authorize or emit the Approval event
-            _approve(address(0), tokenId, address(0), false);
+        require(to != address(0), "INVALID_RECIPIENT");
 
-            unchecked {
-                ds._balances[from] -= 1;
-            }
+        require(ds._ownerOf[id] == address(0), "ALREADY_MINTED");
+
+        // Counter overflow is incredibly unrealistic.
+        unchecked {
+            ds._balanceOf[to]++;
         }
 
-        if (to != address(0)) {
-            unchecked {
-                ds._balances[to] += 1;
-            }
-        }
+        ds._ownerOf[id] = to;
 
-        ds._owners[tokenId] = to;
-
-        emit Transfer(from, to, tokenId);
-
-        return from;
+        emit Transfer(address(0), to, id);
     }
 
-    function _mint(address to, uint256 tokenId) internal {
-        if (to == address(0)) {
-            revert ERC721InvalidReceiver(address(0));
+    function _burn(uint256 id) internal virtual {
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        address owner = ds._ownerOf[id];
+
+        require(owner != address(0), "NOT_MINTED");
+
+        // Ownership check above ensures no underflow.
+        unchecked {
+            ds._balanceOf[owner]--;
         }
-        address previousOwner = _update(to, tokenId, address(0));
-        if (previousOwner != address(0)) {
-            revert ERC721InvalidSender(address(0));
-        }
+
+        delete ds._ownerOf[id];
+
+        delete ds.getApproved[id];
+
+        emit Transfer(owner, address(0), id);
     }
 
-    function _safeMint(address to, uint256 tokenId) internal {
-        _safeMint(to, tokenId, "");
+    /*//////////////////////////////////////////////////////////////
+                        INTERNAL SAFE MINT LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function _safeMint(address to, uint256 id) internal virtual {
+        _mint(to, id);
+
+        require(
+            to.code.length == 0 ||
+                ERC721TokenReceiver(to).onERC721Received(
+                    msg.sender,
+                    address(0),
+                    id,
+                    ""
+                ) ==
+                ERC721TokenReceiver.onERC721Received.selector,
+            "UNSAFE_RECIPIENT"
+        );
     }
 
     function _safeMint(
         address to,
-        uint256 tokenId,
+        uint256 id,
         bytes memory data
     ) internal virtual {
-        _mint(to, tokenId);
-        _checkOnERC721Received(address(0), to, tokenId, data);
-    }
+        _mint(to, id);
 
-    function _burn(uint256 tokenId) internal {
-        address previousOwner = _update(address(0), tokenId, address(0));
-        if (previousOwner == address(0)) {
-            revert ERC721NonexistentToken(tokenId);
-        }
-    }
-
-    function _transfer(address from, address to, uint256 tokenId) internal {
-        if (to == address(0)) {
-            revert ERC721InvalidReceiver(address(0));
-        }
-        address previousOwner = _update(to, tokenId, address(0));
-        if (previousOwner == address(0)) {
-            revert ERC721NonexistentToken(tokenId);
-        } else if (previousOwner != from) {
-            revert ERC721IncorrectOwner(from, tokenId, previousOwner);
-        }
-    }
-
-    function _safeTransfer(address from, address to, uint256 tokenId) internal {
-        _safeTransfer(from, to, tokenId, "");
-    }
-
-    function _safeTransfer(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) internal virtual {
-        _transfer(from, to, tokenId);
-        _checkOnERC721Received(from, to, tokenId, data);
-    }
-
-    function _approve(address to, uint256 tokenId, address auth) internal {
-        _approve(to, tokenId, auth, true);
-    }
-
-    function _approve(
-        address to,
-        uint256 tokenId,
-        address auth,
-        bool emitEvent
-    ) internal virtual {
-        // Avoid reading the owner unless necessary
-
-        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        if (emitEvent || auth != address(0)) {
-            address owner = _requireOwned(tokenId);
-
-            // We do not use _isAuthorized because single-token approvals should not be able to call approve
-            if (
-                auth != address(0) &&
-                owner != auth &&
-                !isApprovedForAll(owner, auth)
-            ) {
-                revert ERC721InvalidApprover(auth);
-            }
-
-            if (emitEvent) {
-                emit Approval(owner, to, tokenId);
-            }
-        }
-
-        ds._tokenApprovals[tokenId] = to;
-    }
-
-    function _setApprovalForAll(
-        address owner,
-        address operator,
-        bool approved
-    ) internal virtual {
-        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        if (operator == address(0)) {
-            revert ERC721InvalidOperator(operator);
-        }
-        ds._operatorApprovals[owner][operator] = approved;
-        emit ApprovalForAll(owner, operator, approved);
-    }
-
-    function _requireOwned(uint256 tokenId) internal view returns (address) {
-        address owner = _ownerOf(tokenId);
-        if (owner == address(0)) {
-            revert ERC721NonexistentToken(tokenId);
-        }
-        return owner;
-    }
-
-    function _checkOnERC721Received(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) private {
-        if (to.code.length > 0) {
-            try
-                IERC721Receiver(to).onERC721Received(
-                    _msgSender(),
-                    from,
-                    tokenId,
+        require(
+            to.code.length == 0 ||
+                ERC721TokenReceiver(to).onERC721Received(
+                    msg.sender,
+                    address(0),
+                    id,
                     data
-                )
-            returns (bytes4 retval) {
-                if (retval != IERC721Receiver.onERC721Received.selector) {
-                    revert ERC721InvalidReceiver(to);
-                }
-            } catch (bytes memory reason) {
-                if (reason.length == 0) {
-                    revert ERC721InvalidReceiver(to);
-                } else {
-                    /// @solidity memory-safe-assembly
-                    assembly {
-                        revert(add(32, reason), mload(reason))
-                    }
-                }
-            }
-        }
+                ) ==
+                ERC721TokenReceiver.onERC721Received.selector,
+            "UNSAFE_RECIPIENT"
+        );
+    }
+}
+
+/// @notice A generic interface for a contract which properly accepts ERC721 tokens.
+/// @author Solmate (https://github.com/transmissions11/solmate/blob/main/src/tokens/ERC721.sol)
+abstract contract ERC721TokenReceiver {
+    function onERC721Received(
+        address,
+        address,
+        uint256,
+        bytes calldata
+    ) external virtual returns (bytes4) {
+        return ERC721TokenReceiver.onERC721Received.selector;
     }
 }

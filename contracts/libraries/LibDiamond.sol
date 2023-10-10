@@ -61,10 +61,10 @@ library LibDiamond {
         string _name;
         // Token symbol
         string _symbol;
-        mapping(uint256 tokenId => address) _owners;
-        mapping(address owner => uint256) _balances;
-        mapping(uint256 tokenId => address) _tokenApprovals;
-        mapping(address owner => mapping(address operator => bool)) _operatorApprovals;
+        mapping(uint256 => address) _ownerOf;
+        mapping(address => uint256) _balanceOf;
+        mapping(uint256 => address) getApproved;
+        mapping(address => mapping(address => bool)) isApprovedForAll;
         // market place
         uint256 listCount;
         mapping(uint256 => Listing) idToListing;

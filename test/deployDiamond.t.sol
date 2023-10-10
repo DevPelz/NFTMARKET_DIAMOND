@@ -8,6 +8,7 @@ import "../contracts/facets/OwnershipFacet.sol";
 import "../contracts/Diamond.sol";
 import "./helpers/DiamondUtils.sol";
 import {ERC721TOKEN} from "../contracts/facets/NFTFacet.sol";
+import {NftMarketplace} from "../contracts/facets/NftMarketFacet.sol";
 
 contract DiamondDeployer is DiamondUtils, IDiamondCut {
     //contract types of facets to be deployed
@@ -16,6 +17,7 @@ contract DiamondDeployer is DiamondUtils, IDiamondCut {
     DiamondLoupeFacet dLoupe;
     OwnershipFacet ownerF;
     ERC721TOKEN nft;
+    NftMarketplace nftMarket;
 
     function testDeployDiamond() public {
         //deploy facets
@@ -24,11 +26,12 @@ contract DiamondDeployer is DiamondUtils, IDiamondCut {
         dLoupe = new DiamondLoupeFacet();
         ownerF = new OwnershipFacet();
         nft = new ERC721TOKEN();
+        nftMarket = new NftMarketplace();
 
         //upgrade diamond with facets
 
         //build cut struct
-        FacetCut[] memory cut = new FacetCut[](2);
+        FacetCut[] memory cut = new FacetCut[](4);
 
         cut[0] = (
             FacetCut({
@@ -48,9 +51,17 @@ contract DiamondDeployer is DiamondUtils, IDiamondCut {
 
         cut[2] = (
             FacetCut({
-                facetAddress: address(ownerF),
+                facetAddress: address(nft),
                 action: FacetCutAction.Add,
-                functionSelectors: generateSelectors("OwnershipFacet")
+                functionSelectors: generateSelectors("ERC721TOKEN")
+            })
+        );
+
+        cut[3] = (
+            FacetCut({
+                facetAddress: address(nftMarket),
+                action: FacetCutAction.Add,
+                functionSelectors: generateSelectors("NftMarketplace")
             })
         );
 

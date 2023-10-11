@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
 import "forge-std/Test.sol";
 import "solidity-stringutils/strings.sol";
 
@@ -36,7 +39,7 @@ abstract contract DiamondUtils is Test {
             // split at colon, extract string up to next doublequote for methodname
             strings.slice memory method = s.split(colon).until(dbquote);
             selectors[i] = bytes4(method.keccak());
-            strings.slice memory selectr = s.split(comma).until(dbquote); // advance s to the next comma
+            s.split(comma).until(dbquote); // advance s to the next comma
         }
         return selectors;
     }

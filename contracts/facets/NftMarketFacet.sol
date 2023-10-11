@@ -37,6 +37,11 @@ contract NftMarketplace {
         LibDiamond.Listing calldata order
     ) external returns (uint256 id) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+
+        uint256 orderId = ds.listCount;
+        LibDiamond.Listing storage s = LibDiamond.diamondStorage().idToListing[
+            orderId
+        ];
         if (msg.sender != IERC721(order.nftAddress).ownerOf(order.tokenId)) {
             revert NotOwner();
         }
@@ -64,11 +69,6 @@ contract NftMarketplace {
         );
         if (!Sign.isValid(messageHash, order.signature, msg.sender))
             revert InvalidSignature();
-
-        uint256 orderId = ds.listCount;
-        LibDiamond.Listing storage s = LibDiamond.diamondStorage().idToListing[
-            orderId
-        ];
 
         s.nftAddress = order.nftAddress;
         s.tokenId = order.tokenId;

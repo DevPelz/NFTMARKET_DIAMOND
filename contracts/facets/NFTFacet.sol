@@ -67,6 +67,14 @@ contract ERC721TOKEN {
         emit Approval(owner, spender, id);
     }
 
+    function isApprovedForAll(
+        address owner,
+        address operator
+    ) public view virtual returns (bool) {
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        return ds.isApprovedForAll[owner][operator];
+    }
+
     function setApprovalForAll(address operator, bool approved) public virtual {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         ds.isApprovedForAll[msg.sender][operator] = approved;
@@ -122,6 +130,10 @@ contract ERC721TOKEN {
         );
     }
 
+    function mint(address _to, uint256 id) public {
+        _mint(_to, id);
+    }
+
     function _mint(address to, uint256 id) internal virtual {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         require(to != address(0), "INVALID_RECIPIENT");
@@ -136,6 +148,10 @@ contract ERC721TOKEN {
         ds._ownerOf[id] = to;
 
         emit Transfer(address(0), to, id);
+    }
+
+    function burn(uint256 id) public {
+        _burn(id);
     }
 
     function _burn(uint256 id) internal virtual {

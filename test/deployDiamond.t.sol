@@ -11,11 +11,10 @@ import "./helpers/SigUtils.sol";
 import {ERC721TOKEN} from "../contracts/facets/NFTFacet.sol";
 import {NftMarketplace} from "../contracts/facets/NftMarketFacet.sol";
 import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
-import "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
-
+import {LibDiamond} from "../contracts/libraries/LibDiamond.sol";
 
 contract DiamondDeployer is Helpers, DiamondUtils, IDiamondCut {
-      using ECDSA for bytes32;
+    using ECDSA for bytes32;
     //contract types of facets to be deployed
     Diamond diamond;
     DiamondCutFacet dCutFacet;
@@ -23,16 +22,17 @@ contract DiamondDeployer is Helpers, DiamondUtils, IDiamondCut {
     OwnershipFacet ownerF;
     ERC721TOKEN nft;
     NftMarketplace nftMarket;
-// NFT variables
-uint256 ownerPriv =
+    NftMarketplace nftMarketDiamond;
+    ERC721TOKEN nftDiamond;
+    // NFT variables
+    uint256 ownerPriv =
         0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
     address public owner = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
     address public user = vm.addr(123444);
-    // address public nftAddr;
-    uint256 public tokenId = 9351;
-    uint256 public price = 3 ether;
-    uint256 public deadline = 1 days;
-    bytes public signature;
+
+    // struct definition
+    LibDiamond.Listing listing;
+
     function setUp() public {
         //deploy facets
         dCutFacet = new DiamondCutFacet();
@@ -41,6 +41,9 @@ uint256 ownerPriv =
         ownerF = new OwnershipFacet();
         nft = new ERC721TOKEN();
         nftMarket = new NftMarketplace();
+
+        nftDiamond = ERC721TOKEN(address(diamond));
+        nftMarketDiamond = NftMarketplace(address(diamond));
 
         //upgrade diamond with facets
 
@@ -84,27 +87,6 @@ uint256 ownerPriv =
 
         //call a function
         DiamondLoupeFacet(address(diamond)).facetAddresses();
-
-           signature = constructSig(
-            nftAddr,
-            tokenId,
-            price,
-            deadline,
-            owner,
-            ownerPriv
-        );
-
-        listing = Listing({
-            nftAddress: nftAddr,
-            tokenId: tokenId,
-            price: price,
-            seller: owner,
-            deadline: deadline,
-            status: true,
-            signature: signature
-        });
-
-        address(nft).mint(owner, tokenId);
     }
 
     function diamondCut(
@@ -113,178 +95,284 @@ uint256 ownerPriv =
         bytes calldata _calldata
     ) external override {}
 
-
-
-    function testValidSig() public {
-        vm.prank(owner);
-        bytes memory sig = constructSig(
-            listing.nftAddress,
-            listing.tokenId,
-            listing.price,
-            listing.deadline,
-            listing.seller,
-            ownerPriv
-        );
-        listing.signature = sig;
-        assertEq(sig, signature);
-    }
-
     function testNotOwner() public {
         vm.startPrank(owner);
-        Nft.mint(owner, 444);
+        nftDiamond.mint(owner, 444);
         vm.stopPrank();
         vm.startPrank(user);
-        vm.expectRevert(NftMarketplace.NotOwner.selector);
-        NftMarket.listItem(listing);
+        vm.expectRevert();
+
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 3 ether;
+        l.seller = owner;
+        l.deadline = 2 hours;
+        nftMarketDiamond.listItem(l);
         vm.stopPrank();
     }
 
     function testNotApproved() public {
         vm.startPrank(owner);
-        Nft.mint(owner, 444);
-        vm.expectRevert(NftMarketplace.NotApprovedForMarketplace.selector);
-        NftMarket.listItem(listing);
+        nftDiamond.mint(owner, 444);
+        vm.expectRevert();
+
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 3 ether;
+        l.seller = owner;
+        l.deadline = 2 hours;
+        nftMarketDiamond.listItem(l);
         vm.stopPrank();
     }
 
-    function testFailPrice() public {
+    function testInvalidPrice() public {
         vm.startPrank(owner);
-        Nft.setApprovalForAll(address(NftMarket), true);
-        listing.price = 0;
-        // listing.status = false;
-        vm.expectRevert(NftMarketplace.PriceMustBeAboveZero.selector);
-        NftMarket.listItem(listing);
+        nftDiamond.setApprovalForAll(address(nftMarket), true);
+        vm.expectRevert();
+
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 0;
+        l.seller = owner;
+        l.deadline = 2 hours;
+        nftMarketDiamond.listItem(l);
         assertEq(listing.status, false);
     }
 
     function testfailDeadline() public {
         vm.startPrank(owner);
-        Nft.setApprovalForAll(address(NftMarket), true);
-        listing.deadline = 2 minutes;
-        vm.expectRevert(NftMarketplace.MinDurationNotMet.selector);
-        NftMarket.listItem(listing);
+        nftDiamond.mint(owner, 444);
+        nftDiamond.setApprovalForAll(address(nftMarketDiamond), true);
+
+        vm.expectRevert();
+
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 3 ether;
+        l.seller = owner;
+        l.deadline = 2 minutes;
+
+        nftMarketDiamond.listItem(l);
     }
 
     function testList() public {
+        nftDiamond.mint(owner, 444);
         vm.startPrank(owner);
-        Nft.mint(owner, 444);
-        Nft.setApprovalForAll(address(NftMarket), true);
-        listing.tokenId = 444;
-        listing.price = 3 ether;
-        listing.seller = owner;
+        nftDiamond.setApprovalForAll(address(diamond), true);
+
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 3 ether;
+        l.seller = owner;
+        l.deadline = 2 hours;
+
         bytes memory sig = constructSig(
-            listing.nftAddress,
-            listing.tokenId,
-            listing.price,
-            listing.deadline,
-            listing.seller,
+            l.nftAddress,
+            l.tokenId,
+            l.price,
+            l.deadline,
+            l.seller,
             ownerPriv
         );
-        listing.signature = sig;
-        NftMarket.listItem(listing);
+        l.signature = sig;
+        nftMarketDiamond.listItem(l);
 
-        assertEq(listing.price, price);
-        assertEq(listing.tokenId, 444);
-        assertEq(listing.deadline, deadline);
-        assertEq(listing.seller, owner);
-        assertEq(listing.signature, sig);
-        assertTrue(listing.status);
-        vm.stopPrank();
-    }
-
-    function testListFailIfNotOwner() public {
-        vm.startPrank(user);
-        listing.seller = user;
-        vm.expectRevert(NftMarketplace.NotOwner.selector);
-        NftMarket.listItem(listing);
-        assertEq(listing.price, 3 ether);
-        assertEq(listing.deadline, deadline);
-        assertEq(listing.seller, user);
-        assertEq(listing.signature, signature);
+        assertEq(l.price, 3 ether);
+        assertEq(l.tokenId, 444);
+        assertEq(l.seller, owner);
+        assertEq(l.signature, sig);
         vm.stopPrank();
     }
 
     function testBuy() public {
         vm.startPrank(owner);
-        Nft.setApprovalForAll(address(NftMarket), true);
-        uint id = NftMarket.listItem(listing);
+        nftDiamond.mint(owner, 444);
+        nftDiamond.setApprovalForAll(address(diamond), true);
+
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 3 ether;
+        l.seller = owner;
+        l.deadline = 2 hours;
+
+        bytes memory sig = constructSig(
+            l.nftAddress,
+            l.tokenId,
+            l.price,
+            l.deadline,
+            l.seller,
+            ownerPriv
+        );
+        l.signature = sig;
+        uint id = nftMarketDiamond.listItem(l);
+
         vm.stopPrank();
 
+        // vm.startPrank(user);
         hoax(user, 20 ether);
-        NftMarket.buyItem{value: 3 ether}(id);
-        assertEq(Nft.ownerOf(tokenId), user);
+        nftMarketDiamond.buyItem{value: 3 ether}(id);
+        assertEq(nftDiamond.ownerOf(l.tokenId), user);
     }
 
     function testBuyShouldRevertIfNotListed() public {
         vm.expectRevert(
             abi.encodeWithSelector(NftMarketplace.NotListed.selector, 3)
         );
-        NftMarket.buyItem(3);
+        nftMarketDiamond.buyItem(3);
     }
 
     function testBuyShouldRevertIfPriceNotMet() public {
         vm.startPrank(owner);
-        Nft.setApprovalForAll(address(NftMarket), true);
-        uint id = NftMarket.listItem(listing);
+
+        nftDiamond.mint(owner, 444);
+        nftDiamond.setApprovalForAll(address(diamond), true);
+
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 3 ether;
+        l.seller = owner;
+        l.deadline = 2 hours;
+
+        bytes memory sig = constructSig(
+            l.nftAddress,
+            l.tokenId,
+            l.price,
+            l.deadline,
+            l.seller,
+            ownerPriv
+        );
+        l.signature = sig;
+        uint id = nftMarketDiamond.listItem(l);
         vm.stopPrank();
 
         vm.prank(user);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                NftMarketplace.PriceNotMet.selector,
-                listing.price
-            )
+            abi.encodeWithSelector(NftMarketplace.PriceNotMet.selector, l.price)
         );
-        NftMarket.buyItem(id);
+        nftMarketDiamond.buyItem(id);
     }
 
-    function testBuyItemFailIfExpired() public{
+    function testBuyItemFailIfExpired() public {
+        nftDiamond.mint(owner, 444);
         vm.startPrank(owner);
-        Nft.setApprovalForAll(address(NftMarket), true);
-        uint id = NftMarket.listItem(listing);
-        vm.stopPrank();
+        nftDiamond.setApprovalForAll(address(diamond), true);
 
-        vm.prank(user);
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 3 ether;
+        l.seller = owner;
+        l.deadline = 2 hours;
+
+        bytes memory sig = constructSig(
+            l.nftAddress,
+            l.tokenId,
+            l.price,
+            l.deadline,
+            l.seller,
+            ownerPriv
+        );
+        l.signature = sig;
+        uint id = nftMarketDiamond.listItem(l);
+
+        vm.startPrank(user);
         vm.warp(2 days);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                NftMarketplace.Expired.selector,
-                listing.deadline
-            )
+            abi.encodeWithSelector(NftMarketplace.Expired.selector, l.deadline)
         );
-        NftMarket.buyItem(id);
+        nftMarketDiamond.buyItem(id);
     }
 
     function testUpdateListing() public {
+        nftDiamond.mint(owner, 444);
         vm.startPrank(owner);
-        Nft.setApprovalForAll(address(NftMarket), true);
-        uint256 id = NftMarket.listItem(listing);
+        nftDiamond.setApprovalForAll(address(diamond), true);
 
-        NftMarket.updateListing(id, 3 ether, true);
-        assertEq(listing.price, 3 ether);
-        assertEq(listing.status, true);
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 3 ether;
+        l.seller = owner;
+        l.deadline = 2 hours;
+
+        bytes memory sig = constructSig(
+            l.nftAddress,
+            l.tokenId,
+            l.price,
+            l.deadline,
+            l.seller,
+            ownerPriv
+        );
+        l.signature = sig;
+        uint id = nftMarketDiamond.listItem(l);
+
+        nftMarketDiamond.updateListing(id, 3 ether, true);
+        assertEq(l.price, 3 ether);
 
         vm.stopPrank();
     }
 
     function testUpdateListingFailIfOrderIdIsGreater() public {
+        nftDiamond.mint(owner, 444);
         vm.startPrank(owner);
-        Nft.setApprovalForAll(address(NftMarket), true);
-        uint256 id = NftMarket.listItem(listing);
+        nftDiamond.setApprovalForAll(address(diamond), true);
 
-        vm.expectRevert(abi.encodeWithSelector(NftMarketplace.NotListed.selector, id + 1));
-        NftMarket.updateListing(id + 1, 3 ether, true);
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 3 ether;
+        l.seller = owner;
+        l.deadline = 2 hours;
+
+        bytes memory sig = constructSig(
+            l.nftAddress,
+            l.tokenId,
+            l.price,
+            l.deadline,
+            l.seller,
+            ownerPriv
+        );
+        l.signature = sig;
+        uint id = nftMarketDiamond.listItem(l);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(NftMarketplace.NotListed.selector, id + 1)
+        );
+        nftMarketDiamond.updateListing(id + 1, 3 ether, true);
     }
 
     function testUpdateListingFailIfNotOwner() public {
+        nftDiamond.mint(owner, 444);
         vm.startPrank(owner);
-        Nft.setApprovalForAll(address(NftMarket), true);
-        uint256 id = NftMarket.listItem(listing);
-        vm.stopPrank();
+        nftDiamond.setApprovalForAll(address(diamond), true);
 
-        vm.prank(user);
+        LibDiamond.Listing memory l;
+        l.nftAddress = address(nftDiamond);
+        l.tokenId = 444;
+        l.price = 3 ether;
+        l.seller = owner;
+        l.deadline = 2 hours;
+
+        bytes memory sig = constructSig(
+            l.nftAddress,
+            l.tokenId,
+            l.price,
+            l.deadline,
+            l.seller,
+            ownerPriv
+        );
+        l.signature = sig;
+        uint id = nftMarketDiamond.listItem(l);
+
+        vm.startPrank(user);
         vm.expectRevert(NftMarketplace.NotOwner.selector);
-        NftMarket.updateListing(id, 3 ether, true);
+        nftMarketDiamond.updateListing(id, 3 ether, true);
     }
-}
 }

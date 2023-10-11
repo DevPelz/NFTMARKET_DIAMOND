@@ -33,7 +33,7 @@ contract ERC721TOKEN {
                          METADATA STORAGE/LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function tokenURI(uint256 id) public view virtual returns (string memory) {
+    function tokenURI() public view virtual returns (string memory) {
         return "";
     }
 

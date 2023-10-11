@@ -75,6 +75,15 @@ contract ERC721TOKEN {
         emit Approval(owner, spender, id);
     }
 
+    function getApproved(
+        uint256 id
+    ) public view virtual returns (address operator) {
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        require(ds._ownerOf[id] != address(0), "NOT_MINTED");
+
+        operator = ds.getApproved[id];
+    }
+
     function isApprovedForAll(
         address owner,
         address operator

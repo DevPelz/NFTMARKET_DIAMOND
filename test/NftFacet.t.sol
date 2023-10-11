@@ -99,4 +99,68 @@ contract DiamondDeployer is Helpers, DiamondUtils, IDiamondCut {
         string memory name = nftDiamond.name();
         assertEq(name, "Test");
     }
+
+    function testSymbol() public {
+        string memory symbol = nftDiamond.symbol();
+        assertEq(symbol, "TST");
+    }
+
+    function testOwnerOf() public {
+        nftDiamond.mint(user, 1);
+
+        assertEq(nftDiamond.ownerOf(1), user);
+    }
+
+    function testBalanceOf() public {
+        nftDiamond.mint(user, 1);
+        assertEq(nftDiamond.balanceOf(user), 1);
+    }
+
+    function testApprove() public {
+        vm.startPrank(user);
+        nftDiamond.mint(user, 1);
+        nftDiamond.approve(owner, 1);
+        assertEq(nftDiamond.getApproved(1), owner);
+    }
+
+    function testIsApprovedForAll() public {
+        vm.startPrank(user);
+        nftDiamond.mint(user, 1);
+        nftDiamond.setApprovalForAll(owner, true);
+        assertEq(nftDiamond.isApprovedForAll(user, owner), true);
+    }
+
+    function testTransferFrom() public {
+        vm.startPrank(user);
+        nftDiamond.mint(user, 1);
+        nftDiamond.setApprovalForAll(owner, true);
+        nftDiamond.transferFrom(user, owner, 1);
+        assertEq(nftDiamond.ownerOf(1), owner);
+    }
+
+    function testSafeTransferFrom() public {
+        vm.startPrank(user);
+        nftDiamond.mint(user, 1);
+        nftDiamond.setApprovalForAll(owner, true);
+        nftDiamond.safeTransferFrom(user, owner, 1);
+        assertEq(nftDiamond.ownerOf(1), owner);
+    }
+
+    function testMint() public {
+        vm.startPrank(user);
+        nftDiamond.mint(user, 1);
+        assertEq(nftDiamond.ownerOf(1), user);
+    }
+
+    function testBurn() public {
+        vm.startPrank(user);
+        nftDiamond.mint(user, 1);
+        nftDiamond.burn(1);
+        assertEq(nftDiamond.balanceOf(user), 0);
+    }
+
+    function testTokenURI() public {
+        string memory uri = nftDiamond.tokenURI();
+        assertEq(uri, "");
+    }
 }

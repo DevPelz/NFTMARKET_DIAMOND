@@ -29,6 +29,14 @@ contract ERC721TOKEN {
         bool approved
     );
 
+    function name() public view returns (string memory) {
+        return LibDiamond.diamondStorage()._name;
+    }
+
+    function symbol() public view returns (string memory) {
+        return LibDiamond.diamondStorage()._symbol;
+    }
+
     /*//////////////////////////////////////////////////////////////
                          METADATA STORAGE/LOGIC
     //////////////////////////////////////////////////////////////*/
